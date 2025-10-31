@@ -1236,7 +1236,7 @@ SPDX-License-Identifier: MIT
           term</span>]</code> pairs are added to the pending set and
           the pairs of the pending set are then non-deterministically
           ordered into a list.  All but the
-          last <code><span class=token>label<span></code> of the pairs
+          last <code><span class=token>label</span></code> of the pairs
           are bound to the <code><span class=token>cfg
           term</span></code> of the following pair and
           the <code><span class=token>label</span></code> of the last
@@ -1248,7 +1248,7 @@ SPDX-License-Identifier: MIT
           the <code><span class=token>label</span></code>.
         </p>
         <p>
-          The <code><span class=token>cfg term</code> of the first
+          The <code><span class=token>cfg term</span></code> of the first
           pair is then tail-called within an empty pending set and
           with the CFG state and the resulting CFG state is returned.
         </p>
@@ -1262,7 +1262,7 @@ SPDX-License-Identifier: MIT
           pending set and in a CFG state,
           the <code>[<span class=token>label</span> <span class=token>cfg
           term</span>]</code> pairs are added to the pending set.
-          The <code><span class=token>body cfg term</code>
+          The <code><span class=token>body cfg term</span></code>
           is then tail-called within the extended pending set and
           with the CFG state and the resulting CFG state is returned.
         </p>
@@ -1363,6 +1363,7 @@ SPDX-License-Identifier: MIT
 	  containing <code>cfg</code> expression is executed.
 	</p>
       </dd>
+    </dl>
 
     <p>The following example defines a CFG keyword that can be used like <code>indep</code> to unconditionally bind loop variables:</p>
 
