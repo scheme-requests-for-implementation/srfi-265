@@ -1,6 +1,8 @@
 #!r6rs
 
-;; Copyright (C) 2025 Marc Nieper-Wißkirchen
+; Copyright (C) 2025 Marc Nieper-Wißkirchen
+;
+; SPDX-License-Identifier: MIT
 
 (library (srfi :265 cfg numbers)
   (export
