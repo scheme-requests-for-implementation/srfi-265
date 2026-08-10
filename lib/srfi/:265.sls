@@ -28,11 +28,15 @@
 (library (srfi :265)
   (export
     cfg
-    indep
     go
-    do
+    branch
+    return
+    return-values
+    defer
     finally
-    halt
+    finally-values
+    let
+    let-values
     let*
     letrec
     permute

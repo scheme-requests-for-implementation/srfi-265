@@ -100,11 +100,11 @@
     (lambda (ast)
       (let f ([ast ast] [constraints '()])
         (cond
-          [(do-ast? ast)
+          [(branch-ast? ast)
            (fold-left
              (lambda (constraints edge)
                (f (exit-edge-next edge) constraints))
-             constraints (do-ast-exit-edges ast))]
+             constraints (branch-ast-exit-edges ast))]
           [(let*-ast? ast)
            (let ([body (let*-ast-body ast)])
              (let* ([constraints (cons (make-constraint ast body) constraints)]
@@ -118,8 +118,14 @@
                  (lambda (constraints bdg)
                    (f (binding-init bdg) constraints))
                  constraints (letrec-ast-bindings ast))))]
-          [(finally-ast? ast)
-           (f (finally-ast-body ast) constraints)]
+          [(defer-ast? ast)
+           (let ([constraints
+                   (fold-left
+                     (lambda (constraints edge)
+                       (f (exit-edge-next edge) constraints))
+                     constraints
+                     (defer-ast-exit-edges ast))])
+             (f (defer-ast-successor ast) constraints))]
           [(permute-ast? ast)
            (f (permute-ast-body ast) constraints)]
           [(permute/tail-ast? ast)
@@ -139,11 +145,11 @@
   (define check-permute/tail-bodies
     (lambda (ast)
       (cond
-        [(do-ast? ast)
+        [(branch-ast? ast)
          (for-each
            (lambda (edge)
              (check-permute/tail-bodies (exit-edge-next edge)))
-           (do-ast-exit-edges ast))]
+           (branch-ast-exit-edges ast))]
         [(let*-ast? ast)
          (check-permute/tail-bodies (binding-init (let*-ast-binding ast)))
          (check-permute/tail-bodies (let*-ast-body ast))]
@@ -153,8 +159,12 @@
              (check-permute/tail-bodies (binding-init bdg)))
            (letrec-ast-bindings ast))
          (check-permute/tail-bodies (letrec-ast-body ast))]
-        [(finally-ast? ast)
-         (check-permute/tail-bodies (finally-ast-body ast))]
+        [(defer-ast? ast)
+         (for-each
+           (lambda (edge)
+             (check-permute/tail-bodies (exit-edge-next edge)))
+           (defer-ast-exit-edges ast))
+         (check-permute/tail-bodies (defer-ast-successor ast))]
         [(permute-ast? ast)
          (check-permute/tail-bodies (permute-ast-body ast))]
         [(permute/tail-ast? ast)
@@ -168,18 +178,39 @@
     (lambda (cfg-term)
       (let f ([cfg-frag cfg-term] [env (empty-environment)])
         (define g (lambda (cfg-frag) (f cfg-frag env)))
-        (syntax-case cfg-frag (go do finally halt let* letrec permute permute/tail)
+        (syntax-case cfg-frag (go branch return-values defer let* letrec permute permute/tail)
           [(go tgt)
            (label-expression? #'tgt)
            (make-go-ast (environment-lookup env #'tgt))]
-          [(do proc-expr [formals next-cfg-frag] ...)
-           (for-all formals? #'(formals ...))
-           (make-do-ast #'proc-expr #'(formals ...) (map g #'(next-cfg-frag ...)))]
-	  [(finally formals expr body-cfg-frag)
-	   (formals? #'formals)
-	   (make-finally-ast #'formals #'expr (g #'body-cfg-frag))]
-	  [(halt)
-	   (make-halt-ast)]
+          [(branch ([(target1 . formals1) next-cfg-frag1]
+                    [(target . formals) next-cfg-frag] ...)
+             expr)
+           (and (identifier? #'target1)
+                (for-all identifier? #'(target ...))
+                (formals? #'formals1)
+                (for-all formals? #'(formals ...)))
+           (make-branch-ast
+             #'expr
+             #'(target1 target ...)
+             #'(formals1 formals ...)
+             (map g #'(next-cfg-frag1 next-cfg-frag ...)))]
+	  [(return-values [formals expr] ...)
+	   (for-all formals? #'(formals ...))
+	   (make-return-values-ast #'(formals ...) #'(expr ...))]
+          [(defer ([(target1 . formals1) branch-cfg-frag1]
+                   [(target . formals) branch-cfg-frag] ...)
+             expr
+             successor-cfg-frag)
+           (and (identifier? #'target1)
+                (for-all identifier? #'(target ...))
+                (formals? #'formals1)
+                (for-all formals? #'(formals ...)))
+           (make-defer-ast
+             #'expr
+             #'(target1 target ...)
+             #'(formals1 formals ...)
+             (map g #'(branch-cfg-frag1 branch-cfg-frag ...))
+             (g #'successor-cfg-frag))]
 	  [(let* [(lbl-expr init-cfg-frag)] body-cfg-frag)
 	   (label-expression? #'lbl-expr)
 	   (let ([lbl (make-label (car (generate-temporaries #'(lbl-expr))))])

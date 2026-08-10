@@ -29,9 +29,11 @@
   (export
     cfg
     go
-    do
-    finally
-    halt
+    branch
+    return-values
+    defer
+    let
+    let-values
     let*
     letrec
     permute

@@ -152,8 +152,8 @@
 	  (lambda (box covering)
 	    (add-constraint! box (lambda (x) (bitwise-ior x (cover covering))))))
 	(cond
-	 [(do-ast? ast)
-	  (add-constraint<=! (do-ast-sigma ast) rho-type)
+	 [(branch-ast? ast)
+	  (add-constraint<=! (branch-ast-sigma ast) rho-type)
 	  (for-each
 	   (lambda (exit)
 	     (define var* (formals->list (exit-edge-formals exit)))
@@ -169,7 +169,7 @@
 		 psi
 		 epsilon)
 	     (add-constraint=! phi psi))
-	   (do-ast-exit-edges ast))]
+	   (branch-ast-exit-edges ast))]
 	 [(go-ast? ast)
 	  (let ([lbl (go-ast-target-id ast)])
 	    (define bdg (lookup-binding lbl))
@@ -179,29 +179,61 @@
             (add-constraint=! psi (binding-psi bdg))
 	    (add-constraint=! phi (binding-phi bdg))
 	    (add-constraint=! epsilon (binding-epsilon bdg)))]
-	 [(finally-ast? ast)
-          (let ([set (variable-list->bitwise (formals->list (finally-ast-formals ast)))])
-            (define sigma (finally-ast-sigma ast))
-            (define psi-input (finally-ast-psi-input ast))
-	    (define epsilon-input (finally-ast-epsilon-input ast))
-	    (f! (finally-ast-body ast)
-	        env
-	        rho-type
-	        rho-type
+	 [(return-values-ast? ast)
+          (let ([set
+                  (variable-list->bitwise
+                    (apply append
+                      (map formals->list (return-values-ast-formals* ast))))])
+            (add-constraint<=! (return-values-ast-sigma ast) rho-type)
+            (add-constraint! psi (lambda (x) (bitwise-and x set)))
+	    (add-constraint! phi (lambda (x) (bitwise-and x set)))
+	    (add-constraint! epsilon (lambda (x) (bitwise-and x set)))
+	    (add-constraint<=! (return-values-ast-psi-output ast) epsilon))]
+	 [(defer-ast? ast)
+          (let ([psi-input (defer-ast-psi-input ast)]
+                [epsilon-input (defer-ast-epsilon-input ast)])
+            (f! (defer-ast-successor ast)
+                env
+                rho-type
+                rho-type
                 psi-input
-		;; PHI is ignored as `finally' realizes a
-		;; pending sequence.
-		(box -1)
-		epsilon-input)
-            (add-constraint<=! sigma rho-type)
-	    (add-constraint-union! psi (box set) psi-input)
-	    (add-constraint-union! epsilon (box set) epsilon-input)
-	    (add-constraint=! phi psi)
-	    (add-constraint<=! (finally-ast-psi-output ast) epsilon))]
-	 [(halt-ast? ast)
-          (set-box! psi 0)
-	  (set-box! phi 0)
-	  (set-box! epsilon 0)]
+                ;; PHI is ignored as `defer' realizes a pending
+                ;; return action.
+                (box -1)
+                epsilon-input)
+            (add-constraint<=! (defer-ast-sigma ast) rho-type)
+            (for-each
+              (lambda (edge epsilon-branch)
+                (let* ([inner-rho (box -1)]
+                       [psi-branch (box -1)])
+                  ;; The corresponding CFG term resumes forward flow
+                  ;; with the variables in scope when the last CFG term
+                  ;; returned.  This includes the variables in scope on
+                  ;; entry to `defer' and the bindings made by `return-values'.
+                  ;; Target formals are ordinary lexically scoped Scheme
+                  ;; variables and do not enter the CFG-variable state.
+                  (add-constraint-union!
+                    inner-rho rho-type psi-input)
+                  (f! (exit-edge-next edge)
+                      ;; Bindings returned by the last CFG term are in
+                      ;; scope when `defer' resumes forward control.  Add
+                      ;; them to ENV so a `go' can pass them to a label
+                      ;; outside the target term.
+                      (cons psi-input env)
+                      inner-rho
+                      inner-rho
+                      psi-branch
+                      ;; PHI is ignored as `defer' still realizes a
+                      ;; pending return action.
+                      (box -1)
+                      epsilon-branch)
+                  (add-constraint-union! psi psi-input psi-branch)
+                  (add-constraint-union!
+                    epsilon epsilon-input epsilon-branch)))
+              (defer-ast-exit-edges ast)
+              (defer-ast-epsilon-branches ast))
+            (add-constraint=! phi psi)
+            (add-constraint<=! (defer-ast-psi-output ast) epsilon))]
 	 [(let*-ast? ast)
 	  (let ([bdg (let*-ast-binding ast)])
 	    (define delta (binding-delta bdg))
@@ -305,34 +337,44 @@
       (let visit! ([ast ast])
 	(define visit-binding!
 	  (lambda (bdg)
-	    (update-box! (binding-delta bdg) (unbox (binding-rho bdg)))
-	    (update-box! (binding-rho bdg))
-	    (update-box! (binding-sigma bdg))
-            (update-box! (binding-psi bdg))
-	    (visit! (binding-init bdg))))
+	    (if (= -1 (unbox (binding-rho bdg)))
+		(set-box! (binding-rho bdg) #f)
+		(begin
+		  (update-box! (binding-delta bdg) (unbox (binding-rho bdg)))
+		  (update-box! (binding-rho bdg))
+		  (update-box! (binding-sigma bdg))
+		  (update-box! (binding-psi bdg))
+		  (visit! (binding-init bdg))))))
 	(cond
-	 [(halt-ast? ast)
+	 [(return-values-ast? ast)
+          (update-box! (return-values-ast-sigma ast))
+          (update-box! (return-values-ast-psi-output ast))
 	  (values)]
 	 [(go-ast? ast)
 	  (values)]
-	 [(do-ast? ast)
-	  (update-box! (do-ast-sigma ast))
+	 [(branch-ast? ast)
+	  (update-box! (branch-ast-sigma ast))
 	  (for-each
 	   (lambda (edge)
 	     (visit! (exit-edge-next edge)))
-	   (do-ast-exit-edges ast))]
+	   (branch-ast-exit-edges ast))]
 	 [(let*-ast? ast)
 	  (visit-binding! (let*-ast-binding ast))
 	  (visit! (let*-ast-body ast))]
 	 [(letrec-ast? ast)
 	  (for-each visit-binding! (letrec-ast-bindings ast))
 	  (visit! (letrec-ast-body ast))]
-	 [(finally-ast? ast)
-          (update-box! (finally-ast-sigma ast))
-          (update-box! (finally-ast-psi-input ast))
-          (update-box! (finally-ast-psi-output ast))
-	  (update-box! (finally-ast-epsilon-input ast))
-	  (visit! (finally-ast-body ast))]
+         [(defer-ast? ast)
+          (update-box! (defer-ast-sigma ast))
+          (update-box! (defer-ast-psi-input ast))
+          (update-box! (defer-ast-psi-output ast))
+          (update-box! (defer-ast-epsilon-input ast))
+          (for-each update-box! (defer-ast-epsilon-branches ast))
+          (for-each
+            (lambda (edge)
+              (visit! (exit-edge-next edge)))
+            (defer-ast-exit-edges ast))
+          (visit! (defer-ast-successor ast))]
          [(permute-ast? ast)
 	  (visit! (permute-ast-body ast))]
 	 [(permute/tail-ast? ast)

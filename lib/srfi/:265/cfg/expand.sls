@@ -29,9 +29,11 @@
   (export
     expand
     go
-    do
-    finally
-    halt
+    branch
+    return-values
+    defer
+    let
+    let-values
     let*
     letrec
     permute
@@ -61,8 +63,9 @@
                (syntax-violation #f "invalid use of cfg syntax" stx)))])))
 
   (define-auxiliary-cfg-syntax go)
-  (define-auxiliary-cfg-syntax finally)
-  (define-auxiliary-cfg-syntax halt)
+  (define-auxiliary-cfg-syntax branch)
+  (define-auxiliary-cfg-syntax return-values)
+  (define-auxiliary-cfg-syntax defer)
   (define-auxiliary-cfg-syntax permute)
   (define-auxiliary-cfg-syntax permute/tail)
 
@@ -78,11 +81,14 @@
             (with-syntax ([(k ...) k*]
                           [cfg-stx stx])
               (syntax-case kwd
-                  (go do finally halt let* letrec permute permute/tail)
+                  (go branch return-values defer let let-values let* letrec
+                    permute permute/tail)
                 [go (expand-go k* stx)]
-                [do (expand-do k* stx)]
-                [finally (expand-finally k* stx)]
-                [halt (expand-halt k* stx)]
+                [branch (expand-branch k* stx)]
+                [return-values (expand-return-values k* stx)]
+                [defer (expand-defer k* stx)]
+                [let (expand-let k* stx)]
+                [let-values (expand-let-values k* stx)]
                 [letrec (expand-letrec k* stx)]
                 [let* (expand-let* k* stx)]
                 [permute (expand-permute k* stx)]
@@ -99,29 +105,79 @@
                (with-syntax ([(k ...) k*])
                  #'(k ... (go lbl)))]
               [_ (syntax-violation 'go "invalid cfg syntax" stx)])))
-        (define expand-do
+        (define expand-branch
           (lambda (k* stx)
             (syntax-case stx ()
-              [(_ proc-expr [formals cfg] ...)
+              [(_ ([(target1 . formals1) cfg1]
+                    [(target . formals) cfg] ...)
+                  expr)
+               (and (identifier? #'target1)
+                    (for-all identifier? #'(target ...))
+                    (formals? #'formals1)
+                    (for-all formals? #'(formals ...)))
+               (with-syntax ([(k ...) k*])
+                 #'(expand-step expand-branch-step k ...
+                     expr
+                     (target1 target ...)
+                     (formals1 formals ...)
+                     (cfg1 cfg ...)
+                     ()))]
+              [_ (syntax-violation #f "invalid cfg syntax" stx)])))
+        (define expand-return-values
+          (lambda (k* stx)
+            (syntax-case stx ()
+              [(_ [formals expr] ...)
                (for-all formals? #'(formals ...))
                (with-syntax ([(k ...) k*])
-                 #'(expand-step expand-do-step k ...
-                     proc-expr [formals ...] (cfg ...) ()))]
+                 #'(k ... (return-values [formals expr] ...)))]
               [_ (syntax-violation #f "invalid cfg syntax" stx)])))
-        (define expand-finally
+        (define expand-defer
           (lambda (k* stx)
             (syntax-case stx ()
-              [(_ formals expr cfg)
-               (formals? #'formals)
+              [(_ ([(target1 . formals1) cfg1]
+                    [(target . formals) cfg] ...)
+                  expr successor)
+               (and (identifier? #'target1)
+                    (for-all identifier? #'(target ...))
+                    (formals? #'formals1)
+                    (for-all formals? #'(formals ...)))
                (with-syntax ([(k ...) k*])
-                 #'(expand-step expand-finally-step k ... formals expr (cfg) ()))]
+                 #'(expand-step expand-defer-step k ...
+                     expr
+                     (target1 target ...)
+                     (formals1 formals ...)
+                     (cfg1 cfg ... successor)
+                     ()))]
               [_ (syntax-violation #f "invalid cfg syntax" stx)])))
-        (define expand-halt
+        (define expand-let
           (lambda (k* stx)
             (syntax-case stx ()
-              [(_)
+              [(_ lbl ([var expr] ...) cfg)
+               (and (identifier? #'lbl)
+                    (for-all identifier? #'(var ...)))
                (with-syntax ([(k ...) k*])
-                 #'(k ... (halt)))]
+                 #'(expand k ...
+                     (letrec ([lbl cfg])
+                       (let ([var expr] ...)
+                         (go lbl)))))]
+              [(_ ([var expr] ...) cfg)
+               (for-all identifier? #'(var ...))
+               (with-syntax ([(k ...) k*])
+                 #'(expand k ...
+                     (let-values ([(var) expr] ...) cfg)))]
+              [_ (syntax-violation #f "invalid cfg syntax" stx)])))
+        (define expand-let-values
+          (lambda (k* stx)
+            (syntax-case stx ()
+              [(_ ([formals expr] ...) cfg)
+               (for-all formals? #'(formals ...))
+               (with-syntax ([(k ...) k*]
+                             [((var ...) ...)
+                              (map formals->list #'(formals ...))])
+                 #'(expand k ...
+                     (branch ([(target var ... ...) cfg])
+                       (let-values ([formals expr] ...)
+                         (target var ... ...)))))]
               [_ (syntax-violation #f "invalid cfg syntax" stx)])))
         (define expand-let*
           (lambda (k* stx)
@@ -185,15 +241,21 @@
       [(expand-cont k ... cfg2 (cfg3 ...) cfg1)
        (expand-step k ... cfg2 (cfg3 ... cfg1))]))
 
-  (define-syntax expand-do-step
+  (define-syntax expand-branch-step
     (syntax-rules ()
-      [(expand-do-step k ... proc-expr [formals ...] (cfg ...))
-       (k ... (do proc-expr [formals cfg] ...))]))
+      [(expand-branch-step k ... expr (target ...) (formals ...) (cfg ...))
+       (k ... (branch ([(target . formals) cfg] ...) expr))]))
 
-  (define-syntax expand-finally-step
+  (define-syntax expand-defer-step
     (syntax-rules ()
-      [(expand-finally-step k ... formals expr (cfg))
-       (k ... (finally formals expr cfg))]))
+      [(expand-defer-step k ...
+         expr
+         (target ...)
+         (formals ...)
+         (branch ... successor))
+       (k ... (defer ([(target . formals) branch] ...)
+                expr
+              successor))]))
 
   (define-syntax expand-let*-step
     (lambda (stx)

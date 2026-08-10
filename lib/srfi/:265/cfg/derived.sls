@@ -27,7 +27,9 @@
 
 (library (srfi :265 cfg derived)
   (export
-    indep
+    return
+    finally
+    finally-values
     permute
     permute/tail)
   (import
@@ -37,6 +39,54 @@
     (rename (srfi :265 cfg primitive)
       (permute primitive:permute)
       (permute/tail primitive:permute/tail)))
+
+  (define-cfg-syntax return
+    (lambda (stx)
+      (syntax-case stx ()
+        [(_ [var expr] ...)
+         (for-all identifier? #'(var ...))
+         #'(return-values [(var) expr] ...)]
+        [_ (syntax-violation #f "invalid cfg syntax" stx)])))
+
+  (define-cfg-syntax finally-values
+    (let ()
+      (define formals->values-expression
+        (lambda (formals)
+          (syntax-case formals ()
+            [var
+             (identifier? #'var)
+             #'(apply values var)]
+            [(var ...)
+             (for-all identifier? #'(var ...))
+             #'(values var ...)]
+            [(var ... . rest)
+             (and (for-all identifier? #'(var ...))
+                  (identifier? #'rest))
+             #'(apply values var ... rest)]
+            [_ (assert #f)])))
+      (lambda (stx)
+        (syntax-case stx ()
+          [(_ ([formals expr] ...) cfg)
+           (for-all formals? #'(formals ...))
+           (with-syntax ([((var ...) ...)
+                          (map formals->list #'(formals ...))]
+                         [(values-expr ...)
+                          (map formals->values-expression
+                            #'(formals ...))])
+             #'(defer ([(finish var ... ...)
+                         (return-values [formals values-expr] ...)])
+                 (let-values ([formals expr] ...)
+                   (finish var ... ...))
+                 cfg))]
+          [_ (syntax-violation #f "invalid cfg syntax" stx)]))))
+
+  (define-cfg-syntax finally
+    (lambda (stx)
+      (syntax-case stx ()
+        [(_ ([var expr] ...) cfg)
+         (for-all identifier? #'(var ...))
+         #'(finally-values ([(var) expr] ...) cfg)]
+        [_ (syntax-violation #f "invalid cfg syntax" stx)])))
 
   (define-cfg-syntax permute
     (lambda (stx)
@@ -59,16 +109,4 @@
              (lambda (lbl head tail)
                (with-syntax ([lbl lbl] [head head] [tail tail])
                  #'(primitive:permute/tail ([lbl head]) tail)))
-             #'cfg2 #'(lbl ...) #'(cfg1 ...)))])))
-
-  (define-cfg-syntax indep
-    (lambda (stx)
-      (syntax-case stx ()
-	[(_ ([formals expr] ...) cfg)
-	 (for-all formals? #'(formals ...))
-	 (with-syntax ([((var ...) ...)
-			(map formals->list #'(formals ...))])
-	   #'(do (lambda (e)
-			(let-values ([formals expr] ...)
-			  (e var ... ... )))
-	       [(var ... ...) cfg]))]))))
+             #'cfg2 #'(lbl ...) #'(cfg1 ...)))]))))

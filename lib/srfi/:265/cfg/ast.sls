@@ -56,26 +56,33 @@
     letrec-ast?
     letrec-ast-bindings
     letrec-ast-body
-    make-do-ast
-    do-ast?
-    do-ast-sigma
-    do-ast-proc-expr
-    do-ast-exit-edges
-    make-finally-ast
-    finally-ast?
-    finally-ast-formals
-    finally-ast-expr
-    finally-ast-body
-    finally-ast-sigma
-    finally-ast-psi-input
-    finally-ast-psi-output
-    finally-ast-epsilon-input
+    make-branch-ast
+    branch-ast?
+    branch-ast-sigma
+    branch-ast-expr
+    branch-ast-targets
+    branch-ast-exit-edges
     make-go-ast
     go-ast?
     go-ast-target
     go-ast-target-id
-    make-halt-ast
-    halt-ast?
+    make-return-values-ast
+    return-values-ast?
+    return-values-ast-sigma
+    return-values-ast-psi-output
+    return-values-ast-formals*
+    return-values-ast-expr*
+    make-defer-ast
+    defer-ast?
+    defer-ast-sigma
+    defer-ast-psi-input
+    defer-ast-psi-output
+    defer-ast-epsilon-input
+    defer-ast-epsilon-branches
+    defer-ast-expr
+    defer-ast-targets
+    defer-ast-exit-edges
+    defer-ast-successor
     make-permute-ast
     permute-ast?
     permute-ast-body
@@ -100,6 +107,10 @@
   (define formals-list?
     (lambda (obj)
       (and (list? obj) (for-all formals? obj))))
+
+  (define identifier-list?
+    (lambda (obj)
+      (and (list? obj) (for-all identifier? obj))))
 
   (define-record-type label
     (nongenerative label-4193dc41-8dbe-468b-8b63-d1edf5afd5db)
@@ -159,29 +170,19 @@
           (assert (ast? next))
           (p formals next)))))
 
-  (define-record-type do-ast
-    (nongenerative do-ast-cc8be75e-a436-4018-a7e7-07b21f41d891)
+  (define-record-type branch-ast
+    (nongenerative branch-ast-d978e727-1156-481e-a142-00739012931f)
     (sealed #t)
     (parent ast)
-    (fields sigma proc-expr exit-edges)
+    (fields sigma expr targets exit-edges)
     (protocol
       (lambda (n)
-        (lambda (proc-expr formals* next*)
+        (lambda (expr target* formals* next*)
+          (assert (identifier-list? target*))
           (assert (formals-list? formals*))
           (assert (ast-list? next*))
-          ((n #f) (box -1) proc-expr (map make-exit-edge formals* next*))))))
-
-  (define-record-type finally-ast
-    (nongenerative finally-ast-9117b61f-5e3e-4d99-a5fd-6f38d88b4b18)
-    (sealed #t)
-    (parent ast)
-    (fields sigma psi-input psi-output epsilon-input formals expr body)
-    (protocol
-      (lambda (n)
-        (lambda (formals expr body)
-          (assert (formals? formals))
-          (assert (ast? body))
-          ((n #f) (box -1) (box -1) (box -1) (box -1) formals expr body)))))
+          ((n #f) (box -1) expr target*
+            (map make-exit-edge formals* next*))))))
 
   (define-record-type go-ast
     (nongenerative go-ast-3000f675-33f2-44ec-bd18-a95bba38de17)
@@ -199,14 +200,40 @@
       (assert (go-ast? ast))
       (label-id (go-ast-target ast))))
 
-  (define-record-type halt-ast
-    (nongenerative halt-ast-fd4029ec-8abd-4289-afde-33ea2fb57ccb)
+  (define-record-type return-values-ast
+    (nongenerative return-values-ast-6949faf4-1a5a-43c3-97ab-f2196510936e)
     (sealed #t)
     (parent ast)
+    (fields sigma psi-output formals* expr*)
     (protocol
       (lambda (n)
-        (lambda ()
-          ((n #f))))))
+        (lambda (formals* expr*)
+          (assert (formals-list? formals*))
+          ((n #f) (box -1) (box -1) formals* expr*)))))
+
+  (define-record-type defer-ast
+    (nongenerative defer-ast-55e6f7c4-fcc8-4a00-adbe-c6ae468bf50b)
+    (sealed #t)
+    (parent ast)
+    (fields sigma psi-input psi-output epsilon-input epsilon-branches
+      expr targets exit-edges successor)
+    (protocol
+      (lambda (n)
+        (lambda (expr target* formals* branch* successor)
+          (assert (identifier-list? target*))
+          (assert (formals-list? formals*))
+          (assert (ast-list? branch*))
+          (assert (ast? successor))
+          ((n #f)
+           (box -1)
+           (box -1)
+           (box -1)
+           (box -1)
+           (map (lambda (branch) (box -1)) branch*)
+           expr
+           target*
+           (map make-exit-edge formals* branch*)
+           successor)))))
 
   (define-record-type permute-ast
     (nongenerative permute-ast-0ad23656-fda6-4907-9a80-49738ff80017)
