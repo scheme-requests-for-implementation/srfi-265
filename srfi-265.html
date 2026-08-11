@@ -148,11 +148,12 @@ SPDX-License-Identifier: MIT
       </p></li>
     </ol>
 
-    <h2>Table of contents</h2>
+    <h2 id="toc">Table of contents</h2>
     <ul>
       <li>
         <a href="#rationale">Rationale</a>
         <ul>
+          <li><a href="#changes-from-srfi-242">Changes from SRFI 242</a></li>
           <li><a href="#examples">Examples</a></li>
           <li><a href="#using-the-cfg-form">Using the cfg form</a></li>
         </ul>
@@ -160,19 +161,18 @@ SPDX-License-Identifier: MIT
       <li>
         <a href="#specification">Specification</a>
         <ul>
-          <li><a href="#cfgs">CFGs</a></li>
           <li><a href="#preliminary-notions">Preliminary notions</a></li>
           <li><a href="#entry-format">Entry format</a></li>
           <li><a href="#cfg-expressions">CFG Expressions</a></li>
           <li><a href="#primitive-cfg-terms">Primitive CFG terms</a></li>
           <li><a href="#tail-contexts">Tail contexts</a></li>
-          <li><a href="#non-determinism">Non-determinism</a></li>
           <li><a href="#derived-cfg-terms">Derived CFG terms</a></li>
           <li><a href="#cfg-syntax-and-label-definitions">CFG syntax and label definitions</a></li>
         </ul>
       </li>
       <li><a href="#implementation">Implementation</a></li>
       <li><a href="#acknowledgements">Acknowledgements</a></li>
+      <li><a href="#copyright">Copyright</a></li>
     </ul>
 
     <h2 id="rationale">Rationale</h2>
@@ -234,7 +234,7 @@ SPDX-License-Identifier: MIT
       facility built on the CFG language defined in this SRFI in the
       future.</p>
 
-    <h3>Changes from SRFI 242</h3>
+    <h3 id="changes-from-srfi-242">Changes from SRFI 242</h3>
 
     <ul>
       <li><p>The CFG syntax
