@@ -555,7 +555,7 @@ SPDX-License-Identifier: MIT
       (branch ([(e1) (return)]
                [(e2) (return [x 3])])
         (if (odd? y) (e1) (e2)))
-    (+ x 10)<span class=result>11</span></pre>
+    (+ x 10)))<span class=result>11</span></pre>
 
     <p>Here, the control flow exiting the <code>branch</code> CFG term
       can proceed along two possible edges, <code>e1</code>
@@ -591,7 +591,7 @@ SPDX-License-Identifier: MIT
       (branch ([(e1) (return [x #f])]
                [(e2) (return [x 3])])
         (if (odd? y) (e1) (e2)))
-    (+ x 10)<span class=result>13</span></pre>
+    (+ x 10)))<span class=result>13</span></pre>
 
     <pre class=example>(let ([x 1] [y 2])
   (cfg
@@ -1210,7 +1210,7 @@ SPDX-License-Identifier: MIT
   (cfg (let* ([c (permute ([p (finally ([y &apos;inner])
                                   (let ([a x]) (go p)))])
                      (return [a a]))])
-         (permute/tail ([(p) (finally ([b y])
+         (permute/tail ([p (finally ([b y])
                                (let ([x &apos;inner]) (go p)))])
            (go c)))
     (list a b)))<span class=result>(outer outer)</span></pre>
