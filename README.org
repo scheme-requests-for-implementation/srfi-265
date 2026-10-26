@@ -13,7 +13,7 @@ library-name: cfg
 
 This repository hosts [[https://srfi.schemers.org/srfi-265/][SRFI 265]]: The CFG Language, a [[https://srfi.schemers.org/][Scheme Request for Implementation]].
 
-This SRFI is in /draft/ status.
+This SRFI is in /final/ status.
 See also [[/srfi-42/][SRFI 42: Eager Comprehensions]] and [[/srfi-242/][SRFI 242: The CFG Language]].
 The full documentation for this SRFI can be found in the [[https://srfi.schemers.org/srfi-265/srfi-265.html][SRFI Document]].
 
